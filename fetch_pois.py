@@ -39,17 +39,18 @@ PARTS = [
     'nwr["tourism"~"^(museum|attraction|viewpoint|zoo|theme_park)$"]',
     'nwr["leisure"="nature_reserve"]', 'way["landuse"~"^(cemetery|forest)$"]', 'nwr["historic"="castle"]',
     # where people go for a walk (BfN Naturbewusstsein 2009) and city-centre strolls
-    'way["landuse"~"^(meadow|farmland)$"]', 'nwr["natural"="water"]["water"~"^(lake|reservoir|pond)$"]',
-    'RIVER', 'node["natural"="peak"]', 'nwr["leisure"="garden"]["garden:type"="botanical"]',
-    'way["highway"="pedestrian"]', 'way["natural"="wood"]',
+    'nwr["natural"="water"]["water"~"^(lake|reservoir|pond)$"]', 'RIVER', 'node["natural"="peak"]',
+    'nwr["leisure"="garden"]["garden:type"="botanical"]', 'way["highway"="pedestrian"]', 'way["natural"="wood"]',
+    'way["landuse"~"^(meadow|farmland)$"]',
 ]
 QUERY = '[out:json][timeout:300];{sel}({bb});out tags bb;'
 # river banks: the nodes of the river lines, every one of them a point on a bank
 RIVER_QUERY = '[out:json][timeout:300];way["waterway"="river"]({bb});node(w);out;'
-# heavy selectors are asked tile by tile (4 x 2 tiles over the box)
-TILED = ('way["landuse"~"^(meadow|farmland)$"]', 'way["natural"="wood"]')
-TILES = [f"{S + (N - S) * i / 2},{W + (E - W) * j / 4},{S + (N - S) * (i + 1) / 2},{W + (E - W) * (j + 1) / 4}"
-         for i in range(2) for j in range(4)]
+# heavy selectors are asked tile by tile (8 x 4 tiles over the box), outlines only, and get their tags here
+TILED = {'way["landuse"~"^(meadow|farmland)$"]': {"landuse": "meadow"}, 'way["natural"="wood"]': {"natural": "wood"}}
+TILES = [f"{S + (N - S) * i / 4},{W + (E - W) * j / 8},{S + (N - S) * (i + 1) / 4},{W + (E - W) * (j + 1) / 8}"
+         for i in range(4) for j in range(8)]
+LIGHT = '[out:json][timeout:300];{sel}({bb});out bb qt;'
 DAYS = ["Tu", "Sa", "Su"]
 WD = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -179,7 +180,8 @@ def fetch(url):
             if sel == "RIVER":
                 queries = [RIVER_QUERY.format(bb=BB)]
             else:
-                queries = [QUERY.format(sel=sel, bb=bb) for bb in (TILES if sel in TILED else [BB])]
+                queries = ([LIGHT.format(sel=sel, bb=bb) for bb in TILES] if sel in TILED
+                           else [QUERY.format(sel=sel, bb=BB)])
             part = []
             for q in queries:
                 data = urllib.parse.urlencode({"data": q}).encode()
@@ -193,6 +195,8 @@ def fetch(url):
                     sys.exit(f"no answer for {sel}")
             if sel == "RIVER":
                 part = [dict(e, tags={"waterway": "river_bank"}) for e in part[::4]]
+            if sel in TILED:
+                part = [dict(e, tags=TILED[sel]) for e in part]
             json.dump(part, open(cache, "w"))
             print(sel[:40], len(part))
         for e in part:
