@@ -13,7 +13,9 @@ of tagged POIs of the same kind that open on that day (a probability, used as a 
   eat      restaurants, cafés, bars, pubs, fast food, beer gardens
   culture  cinemas, theatres, museums, arts centres, stadiums, event venues, zoos
   church   places of worship, cemeteries
-  walk     parks, nature reserves, forests
+  forest, fields, park, lake, river, hills, zoo   places for a walk (forests, meadows and farmland, parks,
+           lakes, river banks, peaks, zoos and botanical gardens)
+  centre   pedestrian streets, for strolls in town
   daytrip  attractions, viewpoints, zoos, theme parks, castles, nature reserves
 """
 import json
@@ -36,8 +38,14 @@ PARTS = [
     'nwr["amenity"~"^(place_of_worship|grave_yard|fuel|arts_centre|biergarten|events_venue)$"]',
     'nwr["tourism"~"^(museum|attraction|viewpoint|zoo|theme_park)$"]',
     'nwr["leisure"="nature_reserve"]', 'way["landuse"~"^(cemetery|forest)$"]', 'nwr["historic"="castle"]',
+    # where people go for a walk (BfN Naturbewusstsein 2009) and city-centre strolls
+    'way["landuse"~"^(meadow|farmland)$"]', 'nwr["natural"="water"]["water"~"^(lake|reservoir|pond)$"]',
+    'RIVER', 'node["natural"="peak"]', 'nwr["leisure"="garden"]["garden:type"="botanical"]',
+    'way["highway"="pedestrian"]', 'way["natural"="wood"]',
 ]
 QUERY = '[out:json][timeout:300];{sel}({bb});out tags bb;'
+# river banks: the nodes of the river lines, every one of them a point on a bank
+RIVER_QUERY = '[out:json][timeout:300];way["waterway"="river"]({bb});node(w);out;'
 DAYS = ["Tu", "Sa", "Su"]
 WD = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -106,12 +114,13 @@ def open_days(oh):
 
 def kind_of(t):
     """Group used to share opening behaviour between tagged and untagged POIs."""
-    for k in ("shop", "amenity", "leisure", "tourism", "historic"):
+    for k in ("shop", "amenity", "leisure", "tourism", "historic", "natural", "highway"):
         if k in t:
             return f"{k}:{t[k]}"
     if "office" in t: return "office"
     if "craft" in t: return "craft"
     if "aeroway" in t: return "aeroway"
+    if "waterway" in t: return "waterway"
     return f"landuse:{t.get('landuse', '?')}"
 
 
@@ -137,8 +146,16 @@ def classify(t, e):
     if le in ("sports_centre", "fitness_centre", "pitch", "swimming_pool"):
         out.append(("sport", 2 if le in ("sports_centre", "fitness_centre", "swimming_pool") else 1))
     if am in ("place_of_worship", "grave_yard") or lu == "cemetery": out.append(("church", 1))
-    if le in ("park", "nature_reserve") or lu == "forest":
-        out.append(("walk", min(1 + area_ha(e) / 10, 50)))
+    nat, wt = t.get("natural"), t.get("water")
+    big = lambda: min(1 + area_ha(e) / 10, 50)
+    if lu == "forest" or nat == "wood" or le == "nature_reserve": out.append(("forest", big()))
+    if lu in ("meadow", "farmland"): out.append(("fields", big()))
+    if le == "park": out.append(("park", big()))
+    if nat == "water" and wt in ("lake", "reservoir", "pond") and area_ha(e) >= 1: out.append(("lake", big()))
+    if t.get("waterway") == "river_bank": out.append(("river", 1))
+    if nat == "peak": out.append(("hills", 3 if float(re.sub(r"[^0-9.]", "", t.get("ele", "0")) or 0) > 400 else 1))
+    if to == "zoo" or t.get("garden:type") == "botanical": out.append(("zoo", 3))
+    if t.get("highway") == "pedestrian": out.append(("centre", big()))
     if to in ("attraction", "viewpoint", "zoo", "theme_park") or t.get("historic") == "castle" or le == "nature_reserve":
         out.append(("daytrip", 3 if to in ("zoo", "theme_park") else 1))
         if to in ("zoo", "theme_park"): out.append(("culture", 2))
@@ -155,7 +172,8 @@ def fetch(url):
         if cache.exists():
             part = json.load(open(cache))
         else:
-            data = urllib.parse.urlencode({"data": QUERY.format(sel=sel, bb=BB)}).encode()
+            q = RIVER_QUERY.format(bb=BB) if sel == "RIVER" else QUERY.format(sel=sel, bb=BB)
+            data = urllib.parse.urlencode({"data": q}).encode()
             for attempt in range(5):
                 try:
                     part = json.loads(urllib.request.urlopen(url, data=data, timeout=600).read())["elements"]
@@ -164,6 +182,8 @@ def fetch(url):
                     print("retry", sel[:30], attempt, ex); time.sleep(15 * (attempt + 1))
             else:
                 sys.exit(f"no answer for {sel}")
+            if sel == "RIVER":
+                part = [dict(e, tags={"waterway": "river_bank"}) for e in part[::4]]
             json.dump(part, open(cache, "w"))
             print(sel[:40], len(part))
         for e in part:
@@ -188,6 +208,8 @@ def main():
             for i, d in enumerate(DAYS): s[i + 1] += d in od
     # kinds with few tags borrow from a related kind; places that are open daily by nature stay open
     always = ("leisure:park", "leisure:nature_reserve", "landuse:forest", "landuse:cemetery", "amenity:grave_yard",
+              "landuse:meadow", "landuse:farmland", "natural:water", "natural:wood", "natural:peak", "waterway",
+              "highway:pedestrian", "leisure:garden",
               "amenity:place_of_worship", "tourism:viewpoint", "tourism:attraction", "historic:castle", "aeroway",
               "amenity:hospital", "leisure:pitch")
     borrow = {"landuse:industrial": "craft", "landuse:commercial": "office", "landuse:retail": "shop:supermarket"}

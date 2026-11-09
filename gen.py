@@ -36,22 +36,32 @@ TRAVEL = S.W9_MEAN_MIN * 60
 DETOUR = 1.3                                                  # network length / straight line
 
 TYPES = list(S.TYPES)
-ACTS = ["home", "work", "school", "uni", "shop", "errand", "escort", "visit", "outdoors", "sport", "eat",
+ACTS = ["home", "work", "school", "shop", "errand", "visit", "nature", "park", "water", "centre", "sport", "eat",
         "culture", "church"]                                  # then walk, ride
-SHOWN = {"doctor": "errand", "walk": "outdoors", "dog": "outdoors", "daytrip": "outdoors"}
+PLACE_SHOWN = {"forest": "nature", "fields": "nature", "hills": "nature", "park": "park", "zoo": "park",
+               "lake": "water", "river": "water"}
+
+
+def shown(kind):
+    """State on the map for a kind of stop ("walk:forest" -> nature)."""
+    if ":" in kind:
+        return PLACE_SHOWN[kind.split(":")[1]]
+    return {"uni": "school", "doctor": "errand", "escort": "errand", "daytrip": "nature"}.get(kind, kind)
 ANCHOR_PURPOSE = {"work": "work", "school": "edu", "uni": "edu"}
 SECONDARY = ["shop", "errand", "leisure", "escort"]          # W1 columns 3, 4, 5, 6
 # decay lengths (m) relative to each other; one factor per purpose is fitted to MiD W12
 BASE_DECAY = {"work": 9000, "school": 1500, "uni": 15000, "shop": 1200, "errand": 1500, "doctor": 2000,
-              "escort": 1000, "visit": 5000, "walk": 1500, "dog": 600, "sport": 2500, "eat": 3000,
-              "culture": 8000, "church": 2000}
+              "escort": 1000, "visit": 5000, "sport": 2500, "eat": 3000, "culture": 8000, "church": 2000,
+              "centre": 4000, "forest": 3000, "fields": 1500, "park": 1500, "lake": 5000, "river": 2500,
+              "hills": 12000, "zoo": 8000}
+DOG_REACH = 0.4                                               # dog walks stay closer to home (assumption)
 DAYTRIP_KM = (25, 10)                                         # day trips: around 25 km away (assumption)
 WEEKEND = "weekday" if DAY == "weekday" else "weekend"
 F_SOCIAL = S.ZVE_SOCIAL[WEEKEND] / S.ZVE_SOCIAL["all"]
 F_SPORT = S.ZVE_SPORT[WEEKEND] / S.ZVE_SPORT["all"]
 STAY_KIND = {"visit": S.ZVE_VISIT_MIN * F_SOCIAL, "culture": S.ZVE_CULTURE_MIN * F_SOCIAL,
              "sport": S.ZVE_EXERCISE_MIN * F_SPORT, "walk": S.ZVE_EXERCISE_MIN * F_SPORT, **S.ASSUMED_MIN}
-SHOP_KINDS = ("shop", "errand", "doctor")                     # share the ZVE shopping minutes of the day
+SHOP_KINDS = ("shop", "errand", "doctor", "centre")           # share the ZVE shopping minutes of the day
 STAY_MEAN = {"work": D["work_min"] * 60, "school": S.ZVE_SCHOOL_MIN * 60, "uni": S.ZVE_UNI_MIN * 60}
 
 
@@ -71,7 +81,21 @@ MIX = {p: kind_mix(p) for p in SECONDARY}
 
 
 def stay_mean_kind(k):
+    k = k.split(":")[0]
     return (S.ZVE_SHOP_MIN if k in SHOP_KINDS else STAY_KIND[k]) * 60
+
+
+def place_mix(groups):
+    """Kinds of place for a walk, BfN Naturbewusstsein 2009, averaged over the person's age groups."""
+    v = np.mean([S.NB2009[g] for g in groups], axis=0)
+    return v / v.sum()
+
+
+def with_place(kind, groups, r):
+    """Walks and dog walks get a kind of place: "walk" -> "walk:forest"."""
+    if kind not in ("walk", "dog"):
+        return kind
+    return f"{kind}:{S.NB2009_PLACES[int(r.choice(len(S.NB2009_PLACES), p=place_mix(groups)))]}"
 
 
 def bin_of(t):
@@ -148,18 +172,21 @@ class Places:
         self.scale = {}
 
     def weights(self, kind, lat, lon, scale, weekday=False):
-        plat, plon, w, w_wd, _ = self.cat["walk" if kind == "dog" else kind]
+        base, _, place = kind.partition(":")
+        plat, plon, w, w_wd, _ = self.cat[place or base]
         d = np.hypot((plon - lon) * KX, (plat - lat) * KY)
         if kind == "daytrip":
             mu, sd = DAYTRIP_KM
             return (w_wd if weekday else w) * np.exp(-0.5 * ((d / 1000 - mu) / sd) ** 2), d
-        return (w_wd if weekday else w) * np.exp(-d / (BASE_DECAY[kind] * scale)), d
+        decay = BASE_DECAY[place or base] * (DOG_REACH if base == "dog" else 1)
+        return (w_wd if weekday else w) * np.exp(-d / (decay * scale)), d
 
     def choose(self, kind, lat, lon, r, scale, weekday=False):
         """Index and coordinates of one destination."""
         p, _ = self.weights(kind, lat, lon, scale, weekday)
         i = r.choice(len(p), p=p / p.sum())
-        plat, plon = self.cat["walk" if kind == "dog" else kind][:2]
+        base, _, place = kind.partition(":")
+        plat, plon = self.cat[place or base][:2]
         la, lo = float(plat[i]), float(plon[i])
         if kind == "visit":                                   # a home somewhere in that cell
             la += (r.random() - 0.5) * self.cell[0]; lo += (r.random() - 0.5) * self.cell[1]
@@ -207,7 +234,8 @@ def plan(kind, fits):
     def draw():
         purpose = SECONDARY[int(rng.choice(4, p=sec))]
         ks = list(MIX[purpose])
-        return (ks[int(rng.choice(len(ks), p=list(MIX[purpose].values())))], None, purpose)
+        k = ks[int(rng.choice(len(ks), p=list(MIX[purpose].values())))]
+        return (with_place(k, S.AGE_GROUP[kind], rng), None, purpose)
 
     tours = []
     if anchored:
@@ -226,7 +254,7 @@ def plan(kind, fits):
     while rest >= 2:
         tours.append([[draw()], None]); rest -= 2
 
-    # shop, errand and doctor stops share the ZVE shopping minutes of the day; other kinds have their own
+    # shop, errand, doctor and town-centre stops share the ZVE shopping minutes of the day; others have their own
     k = sum(1 for t in tours for a, _, _ in t[0] if a in SHOP_KINDS)
     for t in tours:
         t[0] = [(a, s if s is not None else
@@ -274,7 +302,7 @@ def main():
     places.fit("edu", ["school" if x < 0.83 else "uni" for x in fr.random(len(homes))], homes, fr)
     for p in SECONDARY:
         ks, pr = list(MIX[p]), list(MIX[p].values())
-        places.fit(p, [ks[int(fr.choice(len(ks), p=pr))] for _ in homes], homes, fr)
+        places.fit(p, [with_place(ks[int(fr.choice(len(ks), p=pr))], ("total",), fr) for _ in homes], homes, fr)
 
     agents = []
     for i in range(N):
@@ -322,7 +350,7 @@ def main():
                     continue
                 a["states"].append([pts[0][2], len(ACTS) + mode])
                 a["legs"].append((mode, pts))
-            a["states"].append([r["arr"], ACTS.index(SHOWN.get(act, act))])
+            a["states"].append([r["arr"], ACTS.index(shown(act))])
             a["trips"].append([int(a["t"]), r["arr"], sum(m for m, _ in r["legs"])])
             # MiD purpose of a trip home is the purpose of the trip before it
             a["purposes"].append(a["purposes"][-1] if act == "home" else purpose)

@@ -64,16 +64,16 @@ ZVE_LEISURE_MIN = (75 * 49.3 + 180 * 11.4 + 99 * 33.2) / (49.3 + 11.4 + 33.2)
 
 # What errands and leisure are, by day: MiD W4 and W5 (persons 14+, CATI/CAWI), % of trips with that
 # purpose; "other" and "no answer" are left out. Each MiD answer maps to a kind of place:
-#   shop, errand, doctor, visit (someone's home), eat, dog (dog walk), church, escort,
+#   centre (Einkaufsbummel: a stroll through town), errand, doctor, visit (someone's home), eat, dog (dog walk), church, escort,
 #   culture (culture, events), sport, walk (walks, allotment gardens), daytrip (day trips, short trips, holidays)
-W4_KINDS = ["shop", "errand", "doctor", "errand", "errand", "visit", "visit", "eat", "dog", "church", "escort", "visit"]
+W4_KINDS = ["centre", "errand", "doctor", "errand", "errand", "visit", "visit", "eat", "dog", "church", "escort", "visit"]
 W4 = {   # Einkaufsbummel, Dienstleistungen, Arzt, Behörde/Bank/Post, für andere, Betreuung, Besuch,
          # Restaurant, Hund, Kirche/Friedhof, Begleitung Kinder, andere Treffen
     "weekday":  [8, 9, 21, 9, 7, 3, 11, 4, 4, 3, 2, 3],
     "saturday": [16, 7, 2, 3, 8, 4, 18, 3, 2, 4, 1, 3],
     "sunday":   [3, 1, 0, 3, 7, 6, 31, 6, 4, 6, 1, 2],
 }
-W5_KINDS = ["shop", "errand", "visit", "visit", "culture", "culture", "sport", "eat", "walk", "daytrip", "daytrip",
+W5_KINDS = ["centre", "errand", "visit", "visit", "culture", "culture", "sport", "eat", "walk", "daytrip", "daytrip",
             "walk", "dog", "church", "escort", "visit", "daytrip"]
 W5 = {   # Einkaufsbummel, Erledigung für andere, Betreuung, Besuch, Kultur, Veranstaltung, Sport, Restaurant,
          # Schrebergarten, Tagesausflug, Urlaub, Spaziergang, Hund, Kirche/Friedhof, Begleitung Kinder,
@@ -103,3 +103,19 @@ ZVE_CULTURE_MIN = 180             # "Unterhaltung und Kultur"
 ZVE_EXERCISE_MIN = 99             # "Sport, körperliche Bewegung" (walks included)
 # no survey value for these; assumptions, shown on the page
 ASSUMED_MIN = {"dog": 30, "eat": 75, "church": 60, "daytrip": 300, "escort": 10}
+
+# Where walks go: BfN Naturbewusstsein 2009 (n = 1,942), question 7 "Wenn Sie nach draußen in die Natur
+# gehen, wohin gehen Sie dann normalerweise?", open question, several answers, % of respondents, by age.
+# Left out: own or friends' garden (no trip, or a visit), sea (not in the region), generic "walking paths"
+# and named regions. Walks and dog walks (MiD W5) go to these kinds of place in these proportions.
+NB2009_PLACES = ["forest", "fields", "park", "lake", "river", "hills", "zoo"]
+NB2009 = {   # Wald, Felder und Wiesen, Park, See, Flussufer, Berge, Botanische Gärten/Zoos
+    "total": [60.9, 45.6, 35.8, 23.6, 19.7, 11.8, 7.8],
+    "-29":   [54.1, 39.3, 36.4, 32.3, 22.0, 13.5, 7.6],
+    "30-49": [63.1, 47.5, 37.6, 27.1, 20.1, 13.1, 9.5],
+    "50-65": [62.3, 46.0, 35.4, 21.3, 19.9, 12.9, 6.5],
+    "66+":   [60.9, 47.2, 33.4, 14.6, 17.2, 7.4, 6.8],
+}
+AGE_GROUP = {"full-time worker": ("30-49", "50-65"), "part-time worker": ("30-49", "50-65"), "pupil": ("-29",),
+             "student": ("-29",), "homemaker": ("30-49", "50-65"), "retiree": ("66+",),
+             "other non-working": ("30-49", "50-65")}
