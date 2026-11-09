@@ -46,6 +46,10 @@ PARTS = [
 QUERY = '[out:json][timeout:300];{sel}({bb});out tags bb;'
 # river banks: the nodes of the river lines, every one of them a point on a bank
 RIVER_QUERY = '[out:json][timeout:300];way["waterway"="river"]({bb});node(w);out;'
+# heavy selectors are asked tile by tile (4 x 2 tiles over the box)
+TILED = ('way["landuse"~"^(meadow|farmland)$"]', 'way["natural"="wood"]')
+TILES = [f"{S + (N - S) * i / 2},{W + (E - W) * j / 4},{S + (N - S) * (i + 1) / 2},{W + (E - W) * (j + 1) / 4}"
+         for i in range(2) for j in range(4)]
 DAYS = ["Tu", "Sa", "Su"]
 WD = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -172,16 +176,21 @@ def fetch(url):
         if cache.exists():
             part = json.load(open(cache))
         else:
-            q = RIVER_QUERY.format(bb=BB) if sel == "RIVER" else QUERY.format(sel=sel, bb=BB)
-            data = urllib.parse.urlencode({"data": q}).encode()
-            for attempt in range(5):
-                try:
-                    part = json.loads(urllib.request.urlopen(url, data=data, timeout=600).read())["elements"]
-                    break
-                except Exception as ex:            # Overpass is busy at times
-                    print("retry", sel[:30], attempt, ex); time.sleep(15 * (attempt + 1))
+            if sel == "RIVER":
+                queries = [RIVER_QUERY.format(bb=BB)]
             else:
-                sys.exit(f"no answer for {sel}")
+                queries = [QUERY.format(sel=sel, bb=bb) for bb in (TILES if sel in TILED else [BB])]
+            part = []
+            for q in queries:
+                data = urllib.parse.urlencode({"data": q}).encode()
+                for attempt in range(5):
+                    try:
+                        part += json.loads(urllib.request.urlopen(url, data=data, timeout=600).read())["elements"]
+                        break
+                    except Exception as ex:        # Overpass is busy at times
+                        print("retry", sel[:30], attempt, ex); time.sleep(15 * (attempt + 1))
+                else:
+                    sys.exit(f"no answer for {sel}")
             if sel == "RIVER":
                 part = [dict(e, tags={"waterway": "river_bank"}) for e in part[::4]]
             json.dump(part, open(cache, "w"))

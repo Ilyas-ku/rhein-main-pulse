@@ -65,19 +65,24 @@ SHOP_KINDS = ("shop", "errand", "doctor", "centre")           # share the ZVE sh
 STAY_MEAN = {"work": D["work_min"] * 60, "school": S.ZVE_SCHOOL_MIN * 60, "uni": S.ZVE_UNI_MIN * 60}
 
 
-def kind_mix(parent):
-    """Kinds of place for a secondary purpose on this day, from MiD W4 (errands) and W5 (leisure)."""
+def kind_mix(parent, centre=1.0):
+    """Kinds of place for a secondary purpose on this day, from MiD W4 (errands) and W5 (leisure).
+
+    centre scales the strolls in town (used on Sunday, see CENTRE_SUNDAY).
+    """
     if parent in ("shop", "escort"):
         return {parent: 1.0}
     kinds, vals = (S.W4_KINDS, S.W4[DAY]) if parent == "errand" else (S.W5_KINDS, S.W5[DAY])
     mix = {}
     for k, v in zip(kinds, vals):
-        mix[k] = mix.get(k, 0) + v
+        mix[k] = mix.get(k, 0) + v * (centre if k == "centre" else 1)
     tot = sum(mix.values())
     return {k: v / tot for k, v in mix.items() if v}
 
 
 MIX = {p: kind_mix(p) for p in SECONDARY}
+# set by the author, not from a survey: on Sunday, strolls in town are a quarter of Saturday's
+CENTRE_SUNDAY = 0.25
 
 
 def stay_mean_kind(k):
@@ -304,12 +309,28 @@ def main():
         ks, pr = list(MIX[p]), list(MIX[p].values())
         places.fit(p, [with_place(ks[int(fr.choice(len(ks), p=pr))], ("total",), fr) for _ in homes], homes, fr)
 
+    plans = [plan(TYPES[kind[i]], fits) for i in range(N)]
+    count_centre = lambda: sum(1 for pl in plans for chain, _ in pl for a, _, _ in chain if a == "centre")
+    if DAY == "sunday":
+        # scale Sunday's strolls in town until they are CENTRE_SUNDAY x Saturday's
+        target = CENTRE_SUNDAY * json.load(open(DATA / "calibration_saturday.json"))["centre_stops"]
+        f = 1.0
+        for _ in range(4):
+            got = count_centre()
+            if abs(got - target) <= max(5, 0.03 * target):
+                break
+            f *= target / max(got, 1)
+            for p in SECONDARY:
+                MIX[p] = kind_mix(p, f)
+            plans = [plan(TYPES[kind[i]], fits) for i in range(N)]
+        print(f"strolls in town: {count_centre()} (target {target:.0f}, MiD share x{f:.2f})")
+
     agents = []
     for i in range(N):
         home = (float(hlat[i]), float(hlon[i]))
         anchor = {}
         legs = []                                   # (kind, lat, lon, stay, earliest departure, purpose)
-        for chain, start in plan(TYPES[kind[i]], fits):
+        for chain, start in plans[i]:
             here = home
             for j, (act, stay, purpose) in enumerate(chain):
                 if act in ANCHOR_PURPOSE:
@@ -388,6 +409,7 @@ def check(agents, fits, places):
            "school_hours": round(fits["school"]["mean"] / H, 2),
            "fit_misfit": {a: round(f["err"], 3) for a, f in fits.items()},
            "kind_mix": {p: {k: round(v * 100) for k, v in MIX[p].items()} for p in ("errand", "leisure")},
+           "centre_stops": sum(1 for a in agents for s in a["states"] if s[1] == ACTS.index("centre")),
            "bins": ["05-08", "08-10", "10-13", "13-16", "16-19", "19-22", "22-05"], "start": rows,
            "dist_bands": ["<0.5", "0.5-1", "1-2", "2-5", "5-10", "10-20", "20-50"], "distance": dist}
     json.dump(out, open(DATA / f"calibration_{DAY}.json", "w"), indent=1)
