@@ -134,8 +134,9 @@ details a { color: var(--accent); }
   <details>
     <summary>How it is made</summary>
     <p><b>Who travels.</b> Person types, the share leaving home, the number of trips and their purposes follow <a href="https://www.mobilitaet-in-deutschland.de/publikationen2023.html" target="_blank" rel="noopener">MiD 2023</a> (tables P36.1, P39.2, W1). MiD gives these per person type for all days together; each is scaled to the chosen day by that day's row. Children under 6 are left out. The same residents, with the same homes and workplaces, live all three days.</p>
-    <p><b>When.</b> Departure times are fitted so that trip start times by purpose match MiD table W7. Stays come from the <a href="https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Einkommen-Konsum-Lebensbedingungen/Zeitverwendung/_inhalt.html" target="_blank" rel="noopener">ZVE 2022</a> time-use survey: <span id="cal-work">7:54</span> at work, 64 min a day for shopping and errands, 96 min for leisure out of home. ZVE counts only 4:51 of school lessons; matching the MiD return trips needs <span id="cal-school">7 h</span> at school, so the model uses that.</p>
-    <p><b>Where.</b> Homes follow the Zensus 2022 population grid. Destinations come from OpenStreetMap, picked with a gravity rule: bigger and nearer places are more likely.</p>
+    <p><b>What they do.</b> Errands and leisure are split by day into visits to friends and family, walks and dog walks, sport, eating out, culture and events, church, day trips, doctors and services (MiD W4, W5). On a Sunday, a third of errand trips are visits and doctors drop to zero.</p>
+    <p><b>When.</b> Departure times are fitted so that trip start times by purpose match MiD table W7. Stays come from the <a href="https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Einkommen-Konsum-Lebensbedingungen/Zeitverwendung/_inhalt.html" target="_blank" rel="noopener">ZVE 2022</a> time-use survey: <span id="cal-work">7:54</span> at work, 64 min a day for shopping and errands, visits and sport longer on weekends. No survey gives these, so they are set: dog walk 30 min, eating out 75 min, church 1 h, day trip 5 h, dropping someone off 10 min. ZVE counts only 4:51 of school lessons; matching the MiD return trips needs <span id="cal-school">7 h</span> at school, so the model uses that.</p>
+    <p><b>Where.</b> Homes follow the Zensus 2022 population grid. Destinations come from OpenStreetMap and count only when open that day: the opening_hours tag where a place has one, otherwise the share of tagged places of the same kind that open. Visits go to other people's homes on the population grid. Places are picked with a gravity rule; how fast attraction falls with distance is fitted per purpose to MiD trip lengths (W12). Someone whose workplace is closed on a weekend works at a place that is open.</p>
     <p><b>How.</b> Earliest-arrival journeys on the DELFI timetable (<a href="https://gtfs.de" target="_blank" rel="noopener">gtfs.de</a>) of that date: walk 4.8 km/h on a 1.3× detour, stops within 1 km, transfers within 400 m plus 2 min. Walking wins when it is faster. Cars and bikes are not modelled, and the survey figures are national, not regional.</p>
     <div class="cal" id="cal"></div>
     <p>The picture illustrates the model; it is not a measurement. Code and data: <a href="https://github.com/Ilyas-ku/rhein-main-pulse" target="_blank" rel="noopener">github.com/Ilyas-ku/rhein-main-pulse</a>.</p>
@@ -146,12 +147,16 @@ details a { color: var(--accent); }
 <script>
 (async () => {
   const COLORS = {
-    home: "#4a5570", work: "#f2b53c", school: "#7bd88f", uni: "#b6e36b", shop: "#ff6fa3",
-    errand: "#f08a5d", escort: "#c9b37e", leisure: "#a98bff", walk: "#f4f1e8", ride: "#39d0e8",
+    home: "#4a5570", work: "#f59e0b", school: "#7bd88f", uni: "#c5e478", shop: "#ff6fa3", errand: "#f08a5d",
+    escort: "#d4a373", visit: "#a98bff", outdoors: "#23b26d", sport: "#ff4d4d", eat: "#fde68a",
+    culture: "#5b8cff", church: "#b5838d", walk: "#f4f1e8", ride: "#39d0e8",
   };
-  const LABEL = { home: "Home", work: "Work", school: "School", uni: "University", shop: "Shopping", errand: "Errands",
-    escort: "Escorting", leisure: "Leisure", walk: "Walking", ride: "On transit" };
-  const ACT_ORDER = ["home", "work", "school", "uni", "shop", "errand", "escort", "leisure", "walk", "ride"];
+  const LABEL = { home: "Home", work: "Work", school: "School", uni: "University", shop: "Shopping",
+    errand: "Errands, doctor", escort: "Taking someone", visit: "Visiting people", outdoors: "Walks, outings",
+    sport: "Sport", eat: "Eating out", culture: "Culture, events", church: "Church, cemetery",
+    walk: "On foot", ride: "On transit" };
+  const ACT_ORDER = ["home", "work", "school", "uni", "shop", "errand", "escort", "visit", "outdoors", "sport", "eat",
+    "culture", "church", "walk", "ride"];
   const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   const T0 = 4 * 3600, T1 = 28 * 3600;
   const hhmm = t => { const m = Math.floor(t / 60) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
@@ -258,7 +263,8 @@ details a { color: var(--accent); }
   let cursor = null, visLegs = [];
   function drawChart() {
     svg.replaceChildren();
-    const order = ["ride", "walk", "leisure", "escort", "errand", "shop", "uni", "school", "work", "home"].map(a => D.acts.indexOf(a));
+    const order = ["ride", "walk", "church", "culture", "eat", "sport", "outdoors", "visit", "escort", "errand", "shop",
+      "uni", "school", "work", "home"].map(a => D.acts.indexOf(a));
     const NB = 288, n = Math.min(set.count, D.NA), base = new Float64Array(NB + 1);
     const counts = order.map(() => new Float64Array(NB + 1));
     for (let b = 0; b <= NB; b++) {
@@ -296,6 +302,17 @@ details a { color: var(--accent); }
     C.bins.forEach((b, i) => h += `<tr><td>${b}</td><td>${all.model[i]}%</td><td>${all.mid[i]}%</td></tr>`);
     h += `<tr><td>Trips per person</td><td>${C.trips_per_person.model.toFixed(1)}</td><td>${C.trips_per_person.mid.toFixed(1)}</td></tr>`;
     h += `<tr><td>Leave home</td><td>${C.share_mobile.model}%</td><td>${C.share_mobile.mid}%</td></tr></tbody></table>`;
+    // trip lengths, all purposes pooled by trip count
+    const tot = C.dist_bands.map(() => [0, 0]);
+    for (const p of Object.keys(C.distance)) {
+      const w = C.start[p].trips;
+      C.distance[p].model.forEach((v, i) => tot[i][0] += v * w);
+      C.distance[p].mid.forEach((v, i) => tot[i][1] += v * w);
+    }
+    const sm = tot.reduce((a, b) => a + b[0], 0), sd = tot.reduce((a, b) => a + b[1], 0);
+    h += `<table><caption>Trip lengths (km), model vs MiD</caption><thead><tr><th>Length</th><th>Model</th><th>MiD</th></tr></thead><tbody>`;
+    C.dist_bands.forEach((b, i) => h += `<tr><td>${b}</td><td>${Math.round(100 * tot[i][0] / sm)}%</td><td>${Math.round(100 * tot[i][1] / sd)}%</td></tr>`);
+    h += `</tbody></table>`;
     $("cal").innerHTML = h;
     $("cal-school").textContent = C.school_hours.toFixed(1).replace(".0", "") + " h";
     const wm = Math.round(C.work_hours * 60);

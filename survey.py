@@ -61,3 +61,45 @@ ZVE_SHOP_MIN = 64                 # Haushaltsführung: "Einkaufen und Inanspruch
 # out-of-home leisure: social contacts 1:15 (49.3%), entertainment and culture 3:00 (11.4%),
 # sport 1:39 (33.2%), weighted by participation
 ZVE_LEISURE_MIN = (75 * 49.3 + 180 * 11.4 + 99 * 33.2) / (49.3 + 11.4 + 33.2)
+
+# What errands and leisure are, by day: MiD W4 and W5 (persons 14+, CATI/CAWI), % of trips with that
+# purpose; "other" and "no answer" are left out. Each MiD answer maps to a kind of place:
+#   shop, errand, doctor, visit (someone's home), eat, dog (dog walk), church, escort,
+#   culture (culture, events), sport, walk (walks, allotment gardens), daytrip (day trips, short trips, holidays)
+W4_KINDS = ["shop", "errand", "doctor", "errand", "errand", "visit", "visit", "eat", "dog", "church", "escort", "visit"]
+W4 = {   # Einkaufsbummel, Dienstleistungen, Arzt, Behörde/Bank/Post, für andere, Betreuung, Besuch,
+         # Restaurant, Hund, Kirche/Friedhof, Begleitung Kinder, andere Treffen
+    "weekday":  [8, 9, 21, 9, 7, 3, 11, 4, 4, 3, 2, 3],
+    "saturday": [16, 7, 2, 3, 8, 4, 18, 3, 2, 4, 1, 3],
+    "sunday":   [3, 1, 0, 3, 7, 6, 31, 6, 4, 6, 1, 2],
+}
+W5_KINDS = ["shop", "errand", "visit", "visit", "culture", "culture", "sport", "eat", "walk", "daytrip", "daytrip",
+            "walk", "dog", "church", "escort", "visit", "daytrip"]
+W5 = {   # Einkaufsbummel, Erledigung für andere, Betreuung, Besuch, Kultur, Veranstaltung, Sport, Restaurant,
+         # Schrebergarten, Tagesausflug, Urlaub, Spaziergang, Hund, Kirche/Friedhof, Begleitung Kinder,
+         # andere Treffen, Kurzreise
+    "weekday":  [2, 0, 1, 12, 3, 2, 22, 7, 2, 3, 1, 15, 12, 1, 2, 7, 1],
+    "saturday": [4, 0, 1, 19, 4, 8, 10, 9, 1, 4, 1, 11, 6, 1, 2, 5, 2],
+    "sunday":   [2, 0, 1, 15, 3, 6, 12, 8, 1, 4, 1, 18, 7, 3, 3, 3, 1],
+}
+
+# MiD W12: trip length by purpose, % per band (km), all days; used to fit how far people go
+W12_BANDS = [0, 0.5, 1, 2, 5, 10, 20, 50]           # the last bands (50-100, 100+) leave the region
+W12 = {
+    "work":    [4, 6, 9, 18, 19, 21, 18],
+    "edu":     [11, 19, 18, 22, 15, 10, 4],
+    "shop":    [14, 19, 19, 24, 14, 7, 3],
+    "errand":  [9, 12, 15, 24, 17, 13, 7],
+    "leisure": [7, 12, 14, 25, 16, 12, 8],
+    "escort":  [9, 16, 16, 24, 16, 11, 6],
+}
+
+# ZVE 2022, minutes per participant: social life and sport/hobbies on Mon-Fri, weekend, all days
+# (63911-10, 63911-11, detail tables); stays of the matching leisure kinds are scaled by day / all days
+ZVE_SOCIAL = {"weekday": 127, "weekend": 203, "all": 152}
+ZVE_SPORT = {"weekday": 132, "weekend": 165, "all": 143}
+ZVE_VISIT_MIN = 75                # "soziale Kontakte"
+ZVE_CULTURE_MIN = 180             # "Unterhaltung und Kultur"
+ZVE_EXERCISE_MIN = 99             # "Sport, körperliche Bewegung" (walks included)
+# no survey value for these; assumptions, shown on the page
+ASSUMED_MIN = {"dog": 30, "eat": 75, "church": 60, "daytrip": 300, "escort": 10}
