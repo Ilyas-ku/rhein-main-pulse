@@ -1,0 +1,5 @@
+cache/
+__pycache__/
+req.json
+res.json
+fetch.log

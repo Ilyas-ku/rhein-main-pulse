@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rhein-Main Pulse</title>
+<meta name="description" content="20,000 synthetic Rhein-Main residents on a Tuesday, a Saturday and a Sunday, calibrated to MiD 2023 and ZVE 2022, every trip routed on the real transit timetable.">
+<meta property="og:title" content="Rhein-Main Pulse">
+<meta property="og:description" content="A synthetic day in Rhein-Main: who is where, hour by hour, and how they get there by transit.">
+<meta property="og:image" content="preview.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Full-bleed night map of the region; one floating instrument panel like a departure board. */
+:root {
+  --ground: #0a0e16; --panel: rgba(13, 18, 28, .9); --line: #232b3b; --ink: #e6e9f0; --muted: #8b94a8;
+  --accent: #39d0e8; --control: #161d2b;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--ground); color: var(--ink); font: 14px/1.45 var(--body); overflow: hidden; }
+[hidden] { display: none !important; }
+#map { position: fixed; inset: 0; }
+.panel {
+  position: fixed; z-index: 2; width: 340px; max-height: calc(100% - 32px); overflow: auto;
+  top: calc(16px + env(safe-area-inset-top, 0px)); left: calc(16px + env(safe-area-inset-left, 0px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; backdrop-filter: blur(6px);
+  display: flex; flex-direction: column; gap: 14px; padding: 16px;
+}
+h1 { margin: 0; font: 600 24px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+.days { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.days button { border: 0; border-radius: 0; background: transparent; padding: 7px 4px; font: 600 15px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.days button + button { border-left: 1px solid var(--line); }
+.days button[aria-pressed="true"] { background: var(--accent); color: #06232a; }
+.days small { display: block; font: 400 10.5px var(--mono); letter-spacing: 0; text-transform: none; margin-top: 3px; opacity: .8; }
+.clock-row { display: flex; align-items: center; gap: 12px; }
+#clock { font: 600 54px/0.9 var(--display); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+#clock small { font-size: 22px; color: var(--muted); margin-left: 2px; }
+.ctrls { display: flex; gap: 6px; margin-left: auto; }
+button, select {
+  font: 500 12px var(--mono); color: var(--ink); background: var(--control); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 9px; cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#play { width: 38px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+.sliders { display: grid; gap: 8px; }
+.sliders label { display: grid; grid-template-columns: 88px 1fr 52px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.sliders output { font: 400 12px var(--mono); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.sliders .check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.sliders .check input { accent-color: var(--accent); width: auto; margin: 0; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: 12.5px; }
+.legend div { display: flex; align-items: center; gap: 7px; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.legend b { margin-left: auto; font: 400 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.chart svg { display: block; width: 100%; height: 92px; }
+.chart .ax { display: flex; justify-content: space-between; font: 400 10.5px var(--mono); color: var(--muted); margin-top: 3px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.stats div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stats b { font: 600 22px/1 var(--display); font-variant-numeric: tabular-nums; }
+.stats span { font-size: 11px; color: var(--muted); line-height: 1.25; }
+details { border-top: 1px solid var(--line); padding-top: 10px; font-size: 12.5px; color: var(--muted); }
+summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details p { margin: 8px 0 0; }
+details a { color: var(--accent); }
+.cal table { width: 100%; border-collapse: collapse; margin-top: 10px; font: 400 11.5px var(--mono); font-variant-numeric: tabular-nums; }
+.cal caption { text-align: left; font: 500 12px var(--body); color: var(--ink); padding-bottom: 4px; }
+.cal th, .cal td { padding: 2px 0; text-align: right; border-bottom: 1px solid var(--line); }
+.cal th:first-child, .cal td:first-child { text-align: left; }
+.cal th { font-weight: 500; color: var(--ink); }
+#status { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; font: 500 13px var(--mono); color: var(--muted); pointer-events: none; }
+@media (max-width: 640px) {
+  .panel {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 55%; border-radius: 10px 10px 0 0;
+    padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    gap: 10px;
+  }
+  #clock { font-size: 42px; }
+  .sub { display: none; }
+  .chart svg { height: 64px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="status">Loading timetable routes…</div>
+<aside class="panel" aria-label="Controls">
+  <div>
+    <h1>Rhein-Main Pulse</h1>
+    <p class="sub">Synthetic residents through one day, every trip routed on the real timetable.</p>
+  </div>
+  <div class="days" role="group" aria-label="Day">
+    <button type="button" id="d-weekday" data-day="weekday" aria-pressed="true">Weekday<small>Tue 17 Nov</small></button>
+    <button type="button" id="d-saturday" data-day="saturday" aria-pressed="false">Saturday<small>Sat 21 Nov</small></button>
+    <button type="button" id="d-sunday" data-day="sunday" aria-pressed="false">Sunday<small>Sun 22 Nov</small></button>
+  </div>
+  <div class="clock-row">
+    <div id="clock">07:30</div>
+    <div class="ctrls">
+      <button id="play" type="button" aria-label="Pause">❚❚</button>
+      <select id="speed" aria-label="Speed">
+        <option value="180">×180</option>
+        <option value="600" selected>×600</option>
+        <option value="1800">×1800</option>
+      </select>
+    </div>
+  </div>
+  <input id="scrub" type="range" min="14400" max="100800" step="60" value="27000" aria-label="Time of day">
+  <div class="chart">
+    <svg id="chart" viewBox="0 0 288 100" preserveAspectRatio="none" role="img" aria-label="Where people are over the day"></svg>
+    <div class="ax"><span>04</span><span>08</span><span>12</span><span>16</span><span>20</span><span>24</span><span>04</span></div>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="sliders">
+    <label for="count">Residents <input id="count" type="range" min="1000" max="20000" step="1000" value="10000"><output id="count-v" for="count">10,000</output></label>
+    <label for="size">Dot size <input id="size" type="range" min="0.5" max="6" step="0.25" value="2"><output id="size-v" for="size">2 px</output></label>
+    <label for="opacity">Opacity <input id="opacity" type="range" min="0.05" max="1" step="0.05" value="0.9"><output id="opacity-v" for="opacity">90%</output></label>
+    <label class="check" for="trails"><input id="trails" type="checkbox" checked> Show trip trails</label>
+    <label class="check" for="athome"><input id="athome" type="checkbox" checked> Show people at home</label>
+  </div>
+  <div class="stats">
+    <div><b id="st-n">–</b><span>residents on the map</span></div>
+    <div><b id="st-med">–</b><span>median trip, door to door</span></div>
+    <div><b id="st-pt">–</b><span>trips that use transit</span></div>
+  </div>
+  <details>
+    <summary>How it is made</summary>
+    <p><b>Who travels.</b> Person types, the share leaving home, the number of trips and their purposes follow <a href="https://www.mobilitaet-in-deutschland.de/publikationen2023.html" target="_blank" rel="noopener">MiD 2023</a> (tables P36.1, P39.2, W1). MiD gives these per person type for all days together; each is scaled to the chosen day by that day's row. Children under 6 are left out. The same residents, with the same homes and workplaces, live all three days.</p>
+    <p><b>When.</b> Departure times are fitted so that trip start times by purpose match MiD table W7. Stays come from the <a href="https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Einkommen-Konsum-Lebensbedingungen/Zeitverwendung/_inhalt.html" target="_blank" rel="noopener">ZVE 2022</a> time-use survey: <span id="cal-work">7:54</span> at work, 64 min a day for shopping and errands, 96 min for leisure out of home. ZVE counts only 4:51 of school lessons; matching the MiD return trips needs <span id="cal-school">7 h</span> at school, so the model uses that.</p>
+    <p><b>Where.</b> Homes follow the Zensus 2022 population grid. Destinations come from OpenStreetMap, picked with a gravity rule: bigger and nearer places are more likely.</p>
+    <p><b>How.</b> Earliest-arrival journeys on the DELFI timetable (<a href="https://gtfs.de" target="_blank" rel="noopener">gtfs.de</a>) of that date: walk 4.8 km/h on a 1.3× detour, stops within 1 km, transfers within 400 m plus 2 min. Walking wins when it is faster. Cars and bikes are not modelled, and the survey figures are national, not regional.</p>
+    <div class="cal" id="cal"></div>
+    <p>The picture illustrates the model; it is not a measurement. Code and data: <a href="https://github.com/Ilyas-ku/rhein-main-pulse" target="_blank" rel="noopener">github.com/Ilyas-ku/rhein-main-pulse</a>.</p>
+  </details>
+</aside>
+
+<script src="https://unpkg.com/deck.gl@9.0.38/dist.min.js"></script>
+<script>
+(async () => {
+  const COLORS = {
+    home: "#4a5570", work: "#f2b53c", school: "#7bd88f", uni: "#b6e36b", shop: "#ff6fa3",
+    errand: "#f08a5d", escort: "#c9b37e", leisure: "#a98bff", walk: "#f4f1e8", ride: "#39d0e8",
+  };
+  const LABEL = { home: "Home", work: "Work", school: "School", uni: "University", shop: "Shopping", errand: "Errands",
+    escort: "Escorting", leisure: "Leisure", walk: "Walking", ride: "On transit" };
+  const ACT_ORDER = ["home", "work", "school", "uni", "shop", "errand", "escort", "leisure", "walk", "ride"];
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const T0 = 4 * 3600, T1 = 28 * 3600;
+  const hhmm = t => { const m = Math.floor(t / 60) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+  const $ = id => document.getElementById(id);
+  const store = { get(k) { try { return localStorage.getItem("pulse:" + k); } catch (e) { return null; } },
+                  set(k, v) { try { localStorage.setItem("pulse:" + k, v); } catch (e) { /* private mode */ } } };
+  const b64u16 = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new Uint16Array(u.buffer); };
+
+  // ---- basemap: population glow + the timetable's own network
+  const [G, NET] = await Promise.all([fetch("data/grid.json").then(r => r.json()), fetch("data/network.json").then(r => r.json())]);
+  const [S, W] = G.box;
+  const pop = b64u16(G.pop);
+  const cv = document.createElement("canvas"); cv.width = G.cols; cv.height = G.rows;
+  const cx = cv.getContext("2d"), img = cx.createImageData(G.cols, G.rows);
+  let pmax = 0; for (const v of pop) pmax = Math.max(pmax, v);
+  for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) {
+    const v = pop[r * G.cols + c], o = ((G.rows - 1 - r) * G.cols + c) * 4;
+    img.data[o] = 120; img.data[o + 1] = 110; img.data[o + 2] = 170; img.data[o + 3] = Math.round(Math.sqrt(v / pmax) * 120);
+  }
+  cx.putImageData(img, 0, 0);
+  const segs = [];
+  for (let i = 0; i < NET.seg.length; i += 5) segs.push({ s: [NET.seg[i], NET.seg[i + 1]], t: [NET.seg[i + 2], NET.seg[i + 3]], n: NET.seg[i + 4] });
+  const towns = [["Frankfurt", 50.1109, 8.6821, 15], ["Offenbach", 50.0956, 8.7761, 12], ["Wiesbaden", 50.0782, 8.2398, 13], ["Mainz", 49.9929, 8.2473, 13],
+    ["Darmstadt", 49.8728, 8.6512, 13], ["Hanau", 50.1264, 8.9283, 12], ["Bad Homburg", 50.2268, 8.6182, 12], ["Eschborn", 50.1436, 8.5703, 11],
+    ["Rüsselsheim", 49.9947, 8.4122, 11], ["Airport", 50.0379, 8.5622, 11], ["Bad Vilbel", 50.1786, 8.7364, 11], ["Langen", 49.9894, 8.6686, 11]];
+  const staticLayers = [
+    new deck.BitmapLayer({ id: "pop", image: cv, bounds: [W, S, W + G.cols * G.dlon, S + G.rows * G.dlat], textureParameters: { minFilter: "linear", magFilter: "linear" } }),
+    new deck.LineLayer({ id: "net", data: segs, getSourcePosition: d => d.s, getTargetPosition: d => d.t,
+      getColor: d => [96, 112, 140, Math.min(150, 25 + d.n / 3)], getWidth: d => d.n > 300 ? 1.4 : 0.8, widthUnits: "pixels" }),
+    new deck.TextLayer({ id: "towns", data: towns, getPosition: d => [d[2], d[1]], getText: d => d[0].toUpperCase(), getSize: d => d[3],
+      getColor: [200, 206, 220, 150], fontFamily: '"Barlow Condensed", "Arial Narrow", sans-serif', fontWeight: 600,
+      characterSet: "auto", getPixelOffset: [0, -14], fontSettings: { sdf: true }, outlineWidth: 3, outlineColor: [10, 14, 22, 220] }),
+  ];
+
+  // ---- one day of agents, decoded into flat arrays
+  let D = null;                                   // the loaded day
+  const cache = new Map();
+  async function loadDay(day) {
+    if (!cache.has(day)) cache.set(day, fetch(`data/day_${day}.json`).then(r => r.json()).then(decode));
+    return cache.get(day);
+  }
+  function decode(J) {
+    const A = J.agents, NA = A.length, acts = J.meta.acts;
+    let np = 0, ns = 0;
+    for (const a of A) { for (const l of a[3]) np += (l.length - 1) / 3; ns += a[4].length / 2; }
+    const d = {
+      meta: J.meta, NA, acts, scol: acts.map(a => rgb(COLORS[a])), homeState: acts.indexOf("home"),
+      pOff: new Int32Array(NA + 1), pX: new Float64Array(np), pY: new Float64Array(np), pT: new Float64Array(np),
+      sOff: new Int32Array(NA + 1), sT: new Float64Array(ns), sS: new Uint8Array(ns),
+      homeX: new Float64Array(NA), homeY: new Float64Array(NA), kind: new Uint8Array(NA),
+      legs: [], trips: [],
+    };
+    let p = 0, q = 0;
+    A.forEach((a, i) => {
+      const [k, hl, ho, L, st, tr] = a;
+      d.kind[i] = k; d.homeX[i] = ho / 1e5; d.homeY[i] = hl / 1e5; d.pOff[i] = p; d.sOff[i] = q;
+      let la = hl, lo = ho, t = 0;
+      for (const l of L) {
+        const path = [], ts = [];
+        for (let j = 1; j < l.length; j += 3) {
+          la += l[j]; lo += l[j + 1]; t += l[j + 2];
+          d.pX[p] = lo / 1e5; d.pY[p] = la / 1e5; d.pT[p] = t; p++;
+          path.push([lo / 1e5, la / 1e5]); ts.push(t);
+        }
+        d.legs.push({ path, ts, mode: l[0], agent: i });
+      }
+      for (let j = 0; j < st.length; j += 2) { d.sT[q] = st[j]; d.sS[q] = st[j + 1]; q++; }
+      for (let j = 0; j < tr.length; j += 3) d.trips.push([i, tr[j + 1] - tr[j], tr[j + 2] > 0]);
+    });
+    d.pOff[NA] = p; d.sOff[NA] = q;
+    return d;
+  }
+  function stateAt(d, i, t) {
+    let lo = d.sOff[i], hi = d.sOff[i + 1] - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (d.sT[m] <= t) lo = m; else hi = m - 1; }
+    return d.sS[lo];
+  }
+  function posAt(d, i, t, out, o) {
+    const a = d.pOff[i], b = d.pOff[i + 1];
+    if (a === b || t <= d.pT[a]) { out[o] = a === b ? d.homeX[i] : d.pX[a]; out[o + 1] = a === b ? d.homeY[i] : d.pY[a]; return; }
+    if (t >= d.pT[b - 1]) { out[o] = d.pX[b - 1]; out[o + 1] = d.pY[b - 1]; return; }
+    let lo = a, hi = b - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (d.pT[m] <= t) lo = m; else hi = m; }
+    const f = d.pT[hi] > d.pT[lo] ? (t - d.pT[lo]) / (d.pT[hi] - d.pT[lo]) : 0;
+    out[o] = d.pX[lo] + f * (d.pX[hi] - d.pX[lo]); out[o + 1] = d.pY[lo] + f * (d.pY[hi] - d.pY[lo]);
+  }
+
+  // ---- settings (remembered per viewer)
+  const set = {
+    day: ["weekday", "saturday", "sunday"].includes(location.hash.slice(1)) ? location.hash.slice(1) : (store.get("day") || "weekday"),
+    count: +(store.get("count") || 10000), size: +(store.get("size") || 2), opacity: +(store.get("opacity") || 0.9),
+    trails: store.get("trails") !== "0", athome: store.get("athome") !== "0",
+  };
+  $("count").value = set.count; $("size").value = set.size; $("opacity").value = set.opacity;
+  $("trails").checked = set.trails; $("athome").checked = set.athome;
+
+  // ---- per-day views: chart, legend, stats, calibration
+  const svg = $("chart"), NS = "http://www.w3.org/2000/svg", legend = $("legend"), legendN = {};
+  for (const a of ACT_ORDER) {
+    const el = document.createElement("div");
+    el.innerHTML = `<i style="background:${COLORS[a]}"></i>${LABEL[a]}<b>0</b>`;
+    legend.appendChild(el); legendN[a] = el.querySelector("b");
+  }
+  let cursor = null, visLegs = [];
+  function drawChart() {
+    svg.replaceChildren();
+    const order = ["ride", "walk", "leisure", "escort", "errand", "shop", "uni", "school", "work", "home"].map(a => D.acts.indexOf(a));
+    const NB = 288, n = Math.min(set.count, D.NA), base = new Float64Array(NB + 1);
+    const counts = order.map(() => new Float64Array(NB + 1));
+    for (let b = 0; b <= NB; b++) {
+      const t = T0 + b * 300, c = new Float64Array(D.acts.length);
+      for (let i = 0; i < n; i++) c[stateAt(D, i, t)]++;
+      order.forEach((s, j) => counts[j][b] = c[s] / n);
+    }
+    order.forEach((s, j) => {
+      let top = "", bot = "";
+      for (let b = 0; b <= NB; b++) top += `${b ? "L" : "M"}${b},${(100 - (base[b] + counts[j][b]) * 100).toFixed(2)}`;
+      for (let b = NB; b >= 0; b--) bot += `L${b},${(100 - base[b] * 100).toFixed(2)}`;
+      for (let b = 0; b <= NB; b++) base[b] += counts[j][b];
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", top + bot + "Z"); path.setAttribute("fill", COLORS[D.acts[s]]);
+      path.setAttribute("fill-opacity", D.acts[s] === "home" ? ".55" : ".9");
+      svg.appendChild(path);
+    });
+    cursor = document.createElementNS(NS, "line");
+    cursor.setAttribute("y1", 0); cursor.setAttribute("y2", 100); cursor.setAttribute("stroke", "#e6e9f0");
+    cursor.setAttribute("stroke-width", "1.2"); cursor.setAttribute("vector-effect", "non-scaling-stroke");
+    svg.appendChild(cursor);
+  }
+  function drawStats() {
+    const n = Math.min(set.count, D.NA), durs = [];
+    let pt = 0;
+    for (const [i, dur, ride] of D.trips) if (i < n) { durs.push(dur); if (ride) pt++; }
+    durs.sort((x, y) => x - y);
+    $("st-n").textContent = n.toLocaleString("en");
+    $("st-med").textContent = durs.length ? Math.round(durs[durs.length >> 1] / 60) + " min" : "–";
+    $("st-pt").textContent = durs.length ? Math.round(100 * pt / durs.length) + "%" : "–";
+  }
+  function drawCalibration() {
+    const C = D.meta.calibration, all = C.start.all;
+    let h = `<table><caption>${C.label}: trip start times, model vs MiD</caption><thead><tr><th>Start</th><th>Model</th><th>MiD</th></tr></thead><tbody>`;
+    C.bins.forEach((b, i) => h += `<tr><td>${b}</td><td>${all.model[i]}%</td><td>${all.mid[i]}%</td></tr>`);
+    h += `<tr><td>Trips per person</td><td>${C.trips_per_person.model.toFixed(1)}</td><td>${C.trips_per_person.mid.toFixed(1)}</td></tr>`;
+    h += `<tr><td>Leave home</td><td>${C.share_mobile.model}%</td><td>${C.share_mobile.mid}%</td></tr></tbody></table>`;
+    $("cal").innerHTML = h;
+    $("cal-school").textContent = C.school_hours.toFixed(1).replace(".0", "") + " h";
+    const wm = Math.round(C.work_hours * 60);
+    $("cal-work").textContent = `${Math.floor(wm / 60)}:${String(wm % 60).padStart(2, "0")}`;
+  }
+  function filterLegs() { visLegs = D.legs.filter(l => l.agent < set.count); }
+
+  // ---- map
+  const narrow = matchMedia("(max-width: 640px)").matches;
+  let t = 7.5 * 3600;
+  const map = new deck.Deck({
+    parent: $("map"),
+    initialViewState: { longitude: narrow ? 8.62 : 8.44, latitude: narrow ? 49.98 : 50.09, zoom: narrow ? 8.6 : 9.7 },
+    controller: true,
+    getTooltip: ({ index, layer }) => layer && layer.id === "agents" && index >= 0 && D
+      ? { text: `${D.meta.types[D.kind[index]]} · ${LABEL[D.acts[stateAt(D, index, t)]].toLowerCase()}`,
+          style: { font: "12px IBM Plex Mono, monospace", background: "#0d121c", color: "#e6e9f0", border: "1px solid #232b3b" } }
+      : null,
+  });
+
+  const clock = $("clock"), scrub = $("scrub"), play = $("play");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let playing = !reduce, last = performance.now(), speed = 600;
+  const setPlay = v => { playing = v; play.textContent = v ? "❚❚" : "▶"; play.setAttribute("aria-label", v ? "Pause" : "Play"); };
+  setPlay(playing);
+  play.onclick = () => setPlay(!playing);
+  $("speed").onchange = e => speed = +e.target.value;
+  scrub.oninput = () => { t = +scrub.value; draw(); };
+
+  let pos = new Float32Array(0), col = new Uint8Array(0);
+  function draw() {
+    if (!D) return;
+    const n = Math.min(set.count, D.NA);
+    if (pos.length !== n * 2) { pos = new Float32Array(n * 2); col = new Uint8Array(n * 4); }
+    const cnt = new Int32Array(D.acts.length), a = Math.round(set.opacity * 255), aHome = Math.round(set.opacity * 120);
+    for (let i = 0; i < n; i++) {
+      posAt(D, i, t, pos, i * 2);
+      const s = stateAt(D, i, t), c = D.scol[s];
+      cnt[s]++;
+      col[i * 4] = c[0]; col[i * 4 + 1] = c[1]; col[i * 4 + 2] = c[2];
+      col[i * 4 + 3] = s === D.homeState ? (set.athome ? aHome : 0) : a;
+    }
+    clock.innerHTML = hhmm(t) + (t >= 86400 ? "<small>+1</small>" : "");
+    scrub.value = t;
+    if (cursor) { cursor.setAttribute("x1", (t - T0) / 300); cursor.setAttribute("x2", (t - T0) / 300); }
+    for (const a of ACT_ORDER) legendN[a].textContent = cnt[D.acts.indexOf(a)].toLocaleString("en");
+    map.setProps({ layers: [
+      ...staticLayers,
+      new deck.TripsLayer({ id: "trails", data: visLegs, visible: set.trails, getPath: d => d.path, getTimestamps: d => d.ts,
+        getColor: d => d.mode ? [57, 208, 232] : [244, 241, 232], opacity: 0.55 * set.opacity, widthMinPixels: 1.5,
+        trailLength: 900, currentTime: t, capRounded: true, jointRounded: true, updateTriggers: { getPath: visLegs.length } }),
+      new deck.ScatterplotLayer({ id: "agents", pickable: true,
+        data: { length: n, attributes: { getPosition: { value: pos.slice(), size: 2 }, getFillColor: { value: col.slice(), size: 4 } } },
+        radiusUnits: "pixels", getRadius: set.size, radiusMinPixels: 0.5, updateTriggers: { getRadius: set.size } }),
+    ] });
+  }
+
+  async function showDay(day) {
+    set.day = day; store.set("day", day);
+    for (const b of document.querySelectorAll(".days button")) b.setAttribute("aria-pressed", String(b.dataset.day === day));
+    try { history.replaceState(null, "", "#" + day); } catch (e) { /* sandboxed */ }
+    $("status").hidden = false; $("status").textContent = "Loading the day…";
+    D = await loadDay(day);
+    $("status").hidden = true;
+    filterLegs(); drawChart(); drawStats(); drawCalibration(); draw();
+  }
+  for (const b of document.querySelectorAll(".days button")) b.onclick = () => showDay(b.dataset.day);
+
+  const fmt = { count: v => (+v).toLocaleString("en"), size: v => `${v} px`, opacity: v => `${Math.round(v * 100)}%` };
+  for (const k of ["count", "size", "opacity"]) {
+    $(`${k}-v`).textContent = fmt[k](set[k]);
+    $(k).oninput = e => {
+      set[k] = +e.target.value; store.set(k, set[k]); $(`${k}-v`).textContent = fmt[k](set[k]);
+      if (k === "count") { filterLegs(); drawChart(); drawStats(); }
+      draw();
+    };
+  }
+  for (const k of ["trails", "athome"]) $(k).onchange = e => { set[k] = e.target.checked; store.set(k, set[k] ? "1" : "0"); draw(); };
+
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (playing && D) { t += dt * speed; if (t > T1) t = T0; draw(); }
+    requestAnimationFrame(frame);
+  }
+  await showDay(set.day);
+  requestAnimationFrame(frame);
+})().catch(e => { const s = document.getElementById("status"); s.hidden = false; s.textContent = "Could not load the data: " + e.message; });
+</script>
+</body>
+</html>
