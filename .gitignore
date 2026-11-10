@@ -3,3 +3,5 @@ __pycache__/
 req.json
 res.json
 fetch.log
+media/
+fonts/
