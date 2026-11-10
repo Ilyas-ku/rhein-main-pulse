@@ -191,10 +191,12 @@ details a { color: var(--accent); }
     new deck.BitmapLayer({ id: "pop", image: cv, bounds: [W, S, W + G.cols * G.dlon, S + G.rows * G.dlat], textureParameters: { minFilter: "linear", magFilter: "linear" } }),
     new deck.LineLayer({ id: "net", data: segs, getSourcePosition: d => d.s, getTargetPosition: d => d.t,
       getColor: d => [96, 112, 140, Math.min(150, 25 + d.n / 3)], getWidth: d => d.n > 300 ? 1.4 : 0.8, widthUnits: "pixels" }),
-    new deck.TextLayer({ id: "towns", data: towns, getPosition: d => [d[2], d[1]], getText: d => d[0].toUpperCase(), getSize: d => d[3],
-      getColor: [200, 206, 220, 150], fontFamily: '"Barlow Condensed", "Arial Narrow", sans-serif', fontWeight: 600,
-      characterSet: "auto", getPixelOffset: [0, -14], fontSettings: { sdf: true }, outlineWidth: 3, outlineColor: [10, 14, 22, 220] }),
   ];
+  // town names sit above everything, light and see-through, so they read without hiding the dots
+  const labels = new deck.TextLayer({ id: "towns", data: towns, getPosition: d => [d[2], d[1]],
+    getText: d => d[0].toUpperCase(), getSize: d => d[3] + 3, getColor: [236, 239, 245, 150],
+    fontFamily: '"Barlow Condensed", "Arial Narrow", sans-serif', fontWeight: 600, characterSet: "auto",
+    fontSettings: { sdf: true }, outlineWidth: 2, outlineColor: [10, 14, 22, 110] });
 
   // ---- one day of agents, decoded into flat arrays
   let D = null;                                   // the loaded day
@@ -373,6 +375,7 @@ details a { color: var(--accent); }
       new deck.ScatterplotLayer({ id: "agents", pickable: true,
         data: { length: n, attributes: { getPosition: { value: pos.slice(), size: 2 }, getFillColor: { value: col.slice(), size: 4 } } },
         radiusUnits: "pixels", getRadius: set.size, radiusMinPixels: 0.5, updateTriggers: { getRadius: set.size } }),
+      labels,
     ] });
   }
 
