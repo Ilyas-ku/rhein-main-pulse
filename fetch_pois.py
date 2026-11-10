@@ -169,13 +169,16 @@ def classify(t, e):
     return out
 
 
-def fetch(url):
+def fetch(url, cached_only=False):
     els, seen = [], set()
     Path("cache").mkdir(exist_ok=True)
     for k, sel in enumerate(PARTS):                # one query per selector: mirrors time out on the union
         cache = Path("cache") / f"part{k}.json"
         if cache.exists():
             part = json.load(open(cache))
+        elif cached_only:
+            print("left out (not downloaded):", sel)
+            continue
         else:
             if sel == "RIVER":
                 queries = [RIVER_QUERY.format(bb=BB)]
@@ -206,8 +209,8 @@ def fetch(url):
 
 
 def main():
-    url = sys.argv[1] if len(sys.argv) > 1 else "https://overpass-api.de/api/interpreter"
-    els = fetch(url)
+    url = next((a for a in sys.argv[1:] if a.startswith("http")), "https://overpass-api.de/api/interpreter")
+    els = fetch(url, cached_only="--cached" in sys.argv)
 
     # opening by kind, from the POIs that carry a readable opening_hours tag
     parsed = {}

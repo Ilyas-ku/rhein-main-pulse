@@ -90,9 +90,13 @@ def stay_mean_kind(k):
     return (S.ZVE_SHOP_MIN if k in SHOP_KINDS else STAY_KIND[k]) * 60
 
 
+MISSING_PLACES = set()                                        # kinds of place with no OSM data, left out
+
+
 def place_mix(groups):
     """Kinds of place for a walk, BfN Naturbewusstsein 2009, averaged over the person's age groups."""
     v = np.mean([S.NB2009[g] for g in groups], axis=0)
+    v = v * np.array([p not in MISSING_PLACES for p in S.NB2009_PLACES])
     return v / v.sum()
 
 
@@ -292,6 +296,10 @@ def main():
     pop = np.frombuffer(base64.b64decode(G["pop"]), np.uint16).astype(float)
     fits = fit_times()
     places = Places(G)
+    # a kind of place with only a handful of points would pull every such walk onto them
+    MISSING_PLACES.update(p for p in S.NB2009_PLACES if p not in places.cat or len(places.cat[p][0]) < 20)
+    if MISSING_PLACES:
+        print("walk places without data, left out:", sorted(MISSING_PLACES))
 
     people = np.random.default_rng(1)                       # same residents on every day
     cell = people.choice(len(pop), N, p=pop / pop.sum())
@@ -409,6 +417,7 @@ def check(agents, fits, places):
            "school_hours": round(fits["school"]["mean"] / H, 2),
            "fit_misfit": {a: round(f["err"], 3) for a, f in fits.items()},
            "kind_mix": {p: {k: round(v * 100) for k, v in MIX[p].items()} for p in ("errand", "leisure")},
+           "walk_places_missing": sorted(MISSING_PLACES),
            "centre_stops": sum(1 for a in agents for s in a["states"] if s[1] == ACTS.index("centre")),
            "bins": ["05-08", "08-10", "10-13", "13-16", "16-19", "19-22", "22-05"], "start": rows,
            "dist_bands": ["<0.5", "0.5-1", "1-2", "2-5", "5-10", "10-20", "20-50"], "distance": dist}

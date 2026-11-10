@@ -17,10 +17,13 @@ opacity. Inspired by Erdoğan Taşkesen's
 |---|---|---|
 | Timetable for Tue 17, Sat 21 and Sun 22 Nov 2026 inside the box 49.85–50.35 N, 8.20–9.00 E | DELFI GTFS via [gtfs.de](https://gtfs.de) | `pipeline/build_timetable.py` |
 | Homes | Zensus 2022 population, ~200 m grid (from [rhein-main-transit-reach](https://github.com/Ilyas-ku/rhein-main-transit-reach)) | `data/grid.json` |
-| Destinations: workplaces, schools, universities, shops, errands, escort trips, leisure | OpenStreetMap via Overpass | `fetch_pois.py` |
-| Person types, who leaves home, number of trips, purposes, trip start times | [MiD 2023](https://www.mobilitaet-in-deutschland.de/publikationen2023.html) tables P36.1, P39.1, P39.2, W1, W7, W9 | `survey.py` |
-| Time spent at work, shopping and errands, leisure | [ZVE 2022](https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Einkommen-Konsum-Lebensbedingungen/Zeitverwendung/_inhalt.html) (Destatis 63911) | `survey.py` |
+| Destinations: workplaces, schools, shops, doctors, services, restaurants, sport, culture, churches, parks, forests, lakes, river banks, peaks, zoos, pedestrian streets; open or closed on each day from `opening_hours` | OpenStreetMap via Overpass | `fetch_pois.py` |
+| Person types, who leaves home, number of trips, purposes, trip start times, trip lengths | [MiD 2023](https://www.mobilitaet-in-deutschland.de/publikationen2023.html) tables P36.1, P39.1, P39.2, W1, W7, W9, W12 | `survey.py` |
+| What errands and leisure are on each day: visits, walks, dog walks, sport, eating out, culture, church, day trips, strolls in town, doctors, services | MiD 2023 tables W4, W5 | `survey.py` |
+| Where walks go: forest, parks, lakes, river banks, hills, zoos, by age group | [BfN Naturbewusstsein 2009](https://www.bfn.de/sites/default/files/2021-05/Naturbewusstsein_2009_Soziodemographie.pdf), question 7 | `survey.py` |
+| Time spent at work, shopping and errands, visits, sport (weekday vs weekend) | [ZVE 2022](https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Einkommen-Konsum-Lebensbedingungen/Zeitverwendung/_inhalt.html) (Destatis 63911) | `survey.py` |
 | Departure times fitted so that trip start times by purpose match MiD W7 (non-negative least squares) | | `gen.py` |
+| How far people go: distance decay per purpose fitted to MiD W12 trip lengths | | `gen.py` |
 | Routing: earliest arrival, walk 4.8 km/h × 1.3 detour, stops within 1 km, transfers ≤ 400 m + 2 min | | `router.js` |
 
 Each run prints, and the page shows, the model next to the survey: share leaving home,
@@ -33,9 +36,18 @@ trips per person and trip start times by time of day.
 - Everyone travels by transit or on foot. Cars and bikes are not modelled.
 - ZVE counts 4:51 of school lessons; the MiD return trips need about 7 h of presence at school,
   so the model uses the fitted value.
-- "5 or more trips" is capped at 6, so trips per person on a Tuesday come out at 2.8 (MiD 3.2).
+- "5 or more trips" is capped at 6, so trips per person on a Tuesday come out at 2.9 (MiD 3.2).
+- Trip lengths follow MiD only roughly (8–18% of trips in another length band): a single exponential decay
+  per purpose gives too few very short and very long trips.
 - Frankfurt Airport is set to about 5% of the work weight (≈80k jobs); escort stops last 10 min.
 - Children under 6 are left out.
+- On Sunday, strolls in town are set to a quarter of Saturday's: a modelling choice, not a survey figure.
+- Fields and meadows (a walk destination in the BfN survey) are left out: their Overpass download did not
+  complete; their share goes to the other walk places.
+- Without a weekend workplace survey by sector, someone whose workplace is closed on a weekend works at a
+  place that OSM shows open that day.
+- No survey gives these stays, so they are set: dog walk 30 min, eating out 75 min, church 1 h,
+  day trip 5 h (about 25 km away).
 
 The picture illustrates the model; it is not a measurement.
 
@@ -45,7 +57,7 @@ The picture illustrates the model; it is not a measurement.
 pip install duckdb numpy scipy
 curl -LO https://download.gtfs.de/germany/free/latest.zip && unzip latest.zip -d feed
 python3 pipeline/build_timetable.py feed data      # dates are set in the script
-python3 fetch_pois.py https://maps.mail.ru/osm/tools/overpass/api/interpreter
+python3 fetch_pois.py https://maps.mail.ru/osm/tools/overpass/api/interpreter   # --cached: use what is downloaded
 for d in weekday saturday sunday; do python3 gen.py $d 20000; done
 ```
 
