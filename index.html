@@ -33,6 +33,7 @@ body { background: var(--ground); color: var(--ink); font: 14px/1.45 var(--body)
 }
 h1 { margin: 0; font: 600 24px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; text-wrap: balance; }
 .sub { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+.panel > * { flex-shrink: 0; }   /* on phones the panel scrolls; its rows must not squash and overlap */
 .days { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .days button { border: 0; border-radius: 0; background: transparent; padding: 7px 4px; font: 600 15px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .days button + button { border-left: 1px solid var(--line); }
@@ -149,15 +150,18 @@ details a { color: var(--accent); }
 (async () => {
   const COLORS = {
     home: "#4a5570", work: "#f59e0b", school: "#c5e478", shop: "#ff6fa3", errand: "#f08a5d", visit: "#a98bff",
-    nature: "#2f9e44", park: "#69db7c", water: "#1c7ed6", centre: "#e599f7", sport: "#ff4d4d", eat: "#fde68a",
+    nature: "#2f9e44", centre: "#e599f7", sport: "#ff4d4d", eat: "#fde68a",
     culture: "#9c36b5", church: "#b5838d", walk: "#f4f1e8", ride: "#39d0e8",
   };
   const LABEL = { home: "Home", work: "Work", school: "School, university", shop: "Shopping",
-    errand: "Errands, doctor, drop-off", visit: "Visiting people", nature: "Forest, hills, day trips",
-    park: "Parks, zoos", water: "Riverside, lakes", centre: "Stroll in town", sport: "Sport", eat: "Eating out",
+    errand: "Errands, doctor, drop-off", visit: "Visiting people", nature: "Walks in nature, parks",
+    centre: "Stroll in town", sport: "Sport", eat: "Eating out",
     culture: "Culture, events", church: "Church, cemetery", walk: "On foot", ride: "On transit" };
-  const ACT_ORDER = ["home", "work", "school", "shop", "errand", "visit", "nature", "park", "water", "centre",
+  const ACT_ORDER = ["home", "work", "school", "shop", "errand", "visit", "nature", "centre",
     "sport", "eat", "culture", "church", "walk", "ride"];
+  // forest and hills, parks and zoos, riverside and lakes are one category on the map
+  const GROUP = { park: "nature", water: "nature" };
+  const shownAs = a => GROUP[a] || a;
   const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   const T0 = 4 * 3600, T1 = 28 * 3600;
   const hhmm = t => { const m = Math.floor(t / 60) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
@@ -204,7 +208,7 @@ details a { color: var(--accent); }
     let np = 0, ns = 0;
     for (const a of A) { for (const l of a[3]) np += (l.length - 1) / 3; ns += a[4].length / 2; }
     const d = {
-      meta: J.meta, NA, acts, scol: acts.map(a => rgb(COLORS[a])), homeState: acts.indexOf("home"),
+      meta: J.meta, NA, acts, scol: acts.map(a => rgb(COLORS[shownAs(a)])), homeState: acts.indexOf("home"),
       pOff: new Int32Array(NA + 1), pX: new Float64Array(np), pY: new Float64Array(np), pT: new Float64Array(np),
       sOff: new Int32Array(NA + 1), sT: new Float64Array(ns), sS: new Uint8Array(ns),
       homeX: new Float64Array(NA), homeY: new Float64Array(NA), kind: new Uint8Array(NA),
@@ -264,23 +268,24 @@ details a { color: var(--accent); }
   let cursor = null, visLegs = [];
   function drawChart() {
     svg.replaceChildren();
-    const order = ["ride", "walk", "church", "culture", "eat", "sport", "centre", "water", "park", "nature", "visit",
-      "errand", "shop", "school", "work", "home"].map(a => D.acts.indexOf(a));
+    const order = ["ride", "walk", "church", "culture", "eat", "sport", "centre", "nature", "visit",
+      "errand", "shop", "school", "work", "home"];
+    const gi = D.acts.map(a => order.indexOf(shownAs(a)));
     const NB = 288, n = Math.min(set.count, D.NA), base = new Float64Array(NB + 1);
     const counts = order.map(() => new Float64Array(NB + 1));
     for (let b = 0; b <= NB; b++) {
       const t = T0 + b * 300, c = new Float64Array(D.acts.length);
       for (let i = 0; i < n; i++) c[stateAt(D, i, t)]++;
-      order.forEach((s, j) => counts[j][b] = c[s] / n);
+      c.forEach((v, k) => { if (gi[k] >= 0) counts[gi[k]][b] += v / n; });
     }
-    order.forEach((s, j) => {
+    order.forEach((g, j) => {
       let top = "", bot = "";
       for (let b = 0; b <= NB; b++) top += `${b ? "L" : "M"}${b},${(100 - (base[b] + counts[j][b]) * 100).toFixed(2)}`;
       for (let b = NB; b >= 0; b--) bot += `L${b},${(100 - base[b] * 100).toFixed(2)}`;
       for (let b = 0; b <= NB; b++) base[b] += counts[j][b];
       const path = document.createElementNS(NS, "path");
-      path.setAttribute("d", top + bot + "Z"); path.setAttribute("fill", COLORS[D.acts[s]]);
-      path.setAttribute("fill-opacity", D.acts[s] === "home" ? ".55" : ".9");
+      path.setAttribute("d", top + bot + "Z"); path.setAttribute("fill", COLORS[g]);
+      path.setAttribute("fill-opacity", g === "home" ? ".55" : ".9");
       svg.appendChild(path);
     });
     cursor = document.createElementNS(NS, "line");
@@ -329,7 +334,7 @@ details a { color: var(--accent); }
     initialViewState: { longitude: narrow ? 8.62 : 8.44, latitude: narrow ? 49.98 : 50.09, zoom: narrow ? 8.6 : 9.7 },
     controller: true,
     getTooltip: ({ index, layer }) => layer && layer.id === "agents" && index >= 0 && D
-      ? { text: `${D.meta.types[D.kind[index]]} · ${LABEL[D.acts[stateAt(D, index, t)]].toLowerCase()}`,
+      ? { text: `${D.meta.types[D.kind[index]]} · ${LABEL[shownAs(D.acts[stateAt(D, index, t)])].toLowerCase()}`,
           style: { font: "12px IBM Plex Mono, monospace", background: "#0d121c", color: "#e6e9f0", border: "1px solid #232b3b" } }
       : null,
   });
@@ -359,7 +364,7 @@ details a { color: var(--accent); }
     clock.innerHTML = hhmm(t) + (t >= 86400 ? "<small>+1</small>" : "");
     scrub.value = t;
     if (cursor) { cursor.setAttribute("x1", (t - T0) / 300); cursor.setAttribute("x2", (t - T0) / 300); }
-    for (const a of ACT_ORDER) legendN[a].textContent = cnt[D.acts.indexOf(a)].toLocaleString("en");
+    for (const a of ACT_ORDER) legendN[a].textContent = D.acts.reduce((s, x, k) => s + (shownAs(x) === a ? cnt[k] : 0), 0).toLocaleString("en");
     map.setProps({ layers: [
       ...staticLayers,
       new deck.TripsLayer({ id: "trails", data: visLegs, visible: set.trails, getPath: d => d.path, getTimestamps: d => d.ts,
